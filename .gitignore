@@ -1,0 +1,12 @@
+# Intellij
+*.iml
+.idea/
+# Visual Studio Code
+.vscode/
+# vi backups
+*.bak
+# Contains the built artifacts
+out/
+etc/
+var/
+*.exe

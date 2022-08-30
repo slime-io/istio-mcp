@@ -1,6 +1,7 @@
 package client
 
 import (
+	"context"
 	"encoding/json"
 	"io/ioutil"
 	"strings"
@@ -52,6 +53,8 @@ const (
 	ChangeLen
 )
 
+const hookCtxValueKey = "_HOOK_CTX"
+
 var (
 	typeTag = monitoring.MustCreateLabel("type")
 	cfgTag  = monitoring.MustCreateLabel("cfg")
@@ -86,6 +89,21 @@ func (d DiscoveryHandlerWrapper) HandleResponse(response *discovery.DiscoveryRes
 	return nil
 }
 
+func GetConfigHandlerHookContextValue(ctx context.Context, key string) (string, bool) {
+	ctxV := ctx.Value(hookCtxValueKey)
+	if ctxV == nil {
+		return "", false
+	}
+
+	mapV, ok := ctxV.(map[string]string)
+	if !ok {
+		return "", false
+	}
+
+	v, ok := mapV[key]
+	return v, ok
+}
+
 type ConfigStoreHandlerAdapter struct {
 	A *ADSC
 
@@ -97,8 +115,8 @@ type ConfigStoreHandlerAdapter struct {
 	AddOrUpdate func(cfg model.Config) (Change, string, string, error)
 	Del         func(gvk resource.GroupVersionKind, name, namespace string) error
 
-	EnterHook func(gvk resource.GroupVersionKind)
-	ExitHook  func(gvk resource.GroupVersionKind)
+	EnterHook func(ctx context.Context, gvk resource.GroupVersionKind, configs []*model.Config)
+	ExitHook  func(ctx context.Context, gvk resource.GroupVersionKind, configs []*model.Config)
 }
 
 func (a *ConfigStoreHandlerAdapter) updateInitTime(gvk resource.GroupVersionKind) bool {
@@ -135,11 +153,12 @@ func (a *ConfigStoreHandlerAdapter) Reset() {
 }
 
 func (a *ConfigStoreHandlerAdapter) TypeConfigsHandler(gvk resource.GroupVersionKind, configs []*model.Config) error {
+	ctx := context.WithValue(context.Background(), hookCtxValueKey, map[string]string{})
 	if h := a.EnterHook; h != nil {
-		h(gvk)
+		h(ctx, gvk, configs)
 	}
 	if h := a.ExitHook; h != nil {
-		defer h(gvk)
+		defer h(ctx, gvk, configs)
 	}
 
 	var (

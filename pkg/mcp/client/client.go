@@ -104,6 +104,20 @@ func GetConfigHandlerHookContextValue(ctx context.Context, key string) (string, 
 	return v, ok
 }
 
+func SetConfigHandlerHookContextValue(ctx context.Context, key, value string) {
+	ctxV := ctx.Value(hookCtxValueKey)
+	if ctxV == nil {
+		return
+	}
+
+	mapV, ok := ctxV.(map[string]string)
+	if !ok || mapV == nil {
+		return
+	}
+
+	mapV[key] = value
+}
+
 type ConfigStoreHandlerAdapter struct {
 	A *ADSC
 

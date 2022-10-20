@@ -185,6 +185,10 @@ type httpServer struct {
 
 var _ HttpServer = &httpServer{}
 
+func (hs *httpServer) ClientsInfo() map[string]mcp.ClientDetailedInfo {
+	return nil // not impl
+}
+
 func (hs *httpServer) RegisterClientEventHandler(h func(mcp.ClientEvent)) {
 	hs.clientEventHandlers = append(hs.clientEventHandlers, h)
 }

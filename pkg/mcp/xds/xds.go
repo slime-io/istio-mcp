@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"istio.io/istio-mcp/pkg/config/schema/resource"
 	"strconv"
 	"sync"
 	"sync/atomic"
@@ -158,19 +159,34 @@ func (conn *Connection) send(res *discovery.DiscoveryResponse) error {
 func (conn *Connection) NonceAcked(stype string) string {
 	conn.mu.RLock()
 	defer conn.mu.RUnlock()
-	if conn.node.Active != nil && conn.node.Active[stype] != nil {
-		return conn.node.Active[stype].NonceAcked
+	wr := conn.node.Active[stype]
+	if wr == nil {
+		return ""
 	}
-	return ""
+	return wr.NonceAcked
 }
 
 func (conn *Connection) NonceSent(stype string) string {
 	conn.mu.RLock()
 	defer conn.mu.RUnlock()
-	if conn.node.Active != nil && conn.node.Active[stype] != nil {
-		return conn.node.Active[stype].NonceSent
+	wr := conn.node.Active[stype]
+	if wr == nil {
+		return ""
 	}
-	return ""
+	return wr.NonceSent
+}
+
+func (conn *Connection) PushStatus() map[resource.GroupVersionKind]mcp.ConfigPushStatus {
+	ret := map[resource.GroupVersionKind]mcp.ConfigPushStatus{}
+	conn.mu.RLock()
+	defer conn.mu.RUnlock()
+	for _, wr := range conn.node.Active {
+		ret[resource.TypeUrlToGvk(wr.TypeUrl)] = mcp.ConfigPushStatus{
+			PushVer: wr.NonceSent,
+			AckVer:  wr.NonceAcked,
+		}
+	}
+	return ret
 }
 
 // isExpectedGRPCError checks a gRPC error code and determines whether it is an expected error when

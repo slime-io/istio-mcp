@@ -2,6 +2,7 @@ package mcp
 
 import (
 	"context"
+	"istio.io/istio-mcp/pkg/config/schema/resource"
 
 	"istio.io/istio-mcp/pkg/model"
 )
@@ -19,12 +20,22 @@ type ClientInfo struct {
 	Addr     string // ip:port. mandatory
 }
 
+type ConfigPushStatus struct {
+	PushVer, AckVer string
+}
+
+type ClientDetailedInfo struct {
+	ClientInfo
+	PushStatus map[resource.GroupVersionKind]ConfigPushStatus
+}
+
 type ClientEvent struct {
 	Clients   []ClientInfo
 	EventType ClientEventType
 }
 
 type Server interface {
+	ClientsInfo() map[string]ClientDetailedInfo
 	RegisterClientEventHandler(h func(ClientEvent))
 	SetConfigStore(store model.ConfigStore)
 	NotifyPush()

@@ -98,6 +98,24 @@ type Server struct {
 
 var _ mcp.Server = &Server{}
 
+func (s *Server) ClientsInfo() map[string]mcp.ClientDetailedInfo {
+	s.xdsClientsMutex.RLock()
+	xdsClients := make(map[string]*Connection, len(s.xdsClients))
+	for k, v := range s.xdsClients {
+		xdsClients[k] = v
+	}
+	s.xdsClientsMutex.RUnlock()
+
+	ret := make(map[string]mcp.ClientDetailedInfo, len(xdsClients))
+	for id, cli := range xdsClients {
+		ret[id] = mcp.ClientDetailedInfo{
+			ClientInfo: cli.clientInfo(),
+			PushStatus: cli.PushStatus(),
+		}
+	}
+	return ret
+}
+
 func (s *Server) RegisterClientEventHandler(h func(mcp.ClientEvent)) {
 	s.clientEventHandlers = append(s.clientEventHandlers, h)
 }

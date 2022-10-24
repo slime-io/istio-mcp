@@ -278,9 +278,6 @@ func initAdsc(url string, certDir string, opts *Config) (*ADSC, error) {
 		cfg:         opts,
 		syncCh:      make(chan string, len(opts.InitialDiscoveryRequests)),
 		sync:        map[resource.GroupVersionKind]time.Time{},
-
-		ackList:     list.New(),
-		ackNotifyCh: make(chan struct{}),
 	}
 	if certDir != "" {
 		opts.CertDir = certDir
@@ -446,12 +443,20 @@ func (a *ADSC) run() error {
 		}
 	}
 
-	var prevConn *grpc.ClientConn
+	var (
+		prevConn        *grpc.ClientConn
+		prevAckNotifyCh chan struct{}
+	)
 	a.mutex.Lock()
 	prevConn, a.conn = a.conn, conn
+	prevAckNotifyCh, a.ackNotifyCh = a.ackNotifyCh, make(chan struct{}, 1)
+	a.ackList = list.New()
 	a.mutex.Unlock()
 	if prevConn != nil {
 		_ = prevConn.Close()
+	}
+	if prevAckNotifyCh != nil {
+		close(prevAckNotifyCh)
 	}
 
 	xds := discovery.NewAggregatedDiscoveryServiceClient(a.conn)
@@ -473,6 +478,7 @@ func (a *ADSC) run() error {
 		a.cfg.StateNotifier(StateConnected)
 	}
 
+	go a.ackTask(a.ackNotifyCh, a.ackList)
 	go a.handleRecv()
 	return nil
 }
@@ -680,10 +686,10 @@ type ackItem struct {
 	ack    *discovery.DiscoveryRequest
 }
 
-func (a *ADSC) ackTask() {
+func (a *ADSC) ackTask(ackNotifyCh chan struct{}, ackList *list.List) {
 	for {
 		select {
-		case _, ok := <-a.ackNotifyCh:
+		case _, ok := <-ackNotifyCh:
 			if !ok {
 				return
 			}
@@ -691,11 +697,11 @@ func (a *ADSC) ackTask() {
 
 		for {
 			a.mutex.Lock()
-			f := a.ackList.Front()
+			f := ackList.Front()
 			if f == nil {
 				break
 			}
-			a.ackList.Remove(f)
+			ackList.Remove(f)
 			a.mutex.Unlock()
 
 			item := f.Value.(ackItem)

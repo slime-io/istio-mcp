@@ -34,10 +34,14 @@ type ClientEvent struct {
 	EventType ClientEventType
 }
 
+type PushRequest struct {
+	RevChangeConfigs map[model.ConfigKey]struct{}
+}
+
 type Server interface {
 	ClientsInfo() map[string]ClientDetailedInfo
 	RegisterClientEventHandler(h func(ClientEvent))
 	SetConfigStore(store model.ConfigStore)
-	NotifyPush()
+	NotifyPush(req *PushRequest)
 	Start(ctx context.Context)
 }

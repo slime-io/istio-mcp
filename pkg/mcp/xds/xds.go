@@ -52,9 +52,6 @@ type DiscoveryStream interface {
 
 // Event represents a config or registry event that results in a push.
 type Event struct {
-	// Indicate whether the push is Full Push
-	full bool
-
 	configsUpdated map[model.ConfigKey]struct{}
 
 	// Push context to use for the push.
@@ -89,6 +86,7 @@ type Connection struct {
 
 	// Sending on this channel results in a push.
 	pushChannel chan *Event
+	pendingEv   *Event
 
 	// Both ADS and SDS streams implement this interface
 	stream DiscoveryStream
@@ -116,10 +114,13 @@ func (conn *Connection) clientInfo() mcp.ClientInfo {
 }
 
 func (conn *Connection) Notify(ev *Event) bool {
+	conn.mu.Lock()
+	defer conn.mu.Unlock()
 	select {
 	case conn.pushChannel <- ev:
 		return true
 	default:
+		conn.updatePendingEv(ev)
 		return false
 	}
 }
@@ -185,6 +186,50 @@ func (conn *Connection) PushStatus() map[resource.GroupVersionKind]mcp.ConfigPus
 			PushVer: wr.NonceSent,
 			AckVer:  wr.NonceAcked,
 		}
+	}
+	return ret
+}
+
+// updatePendingEv caller should hold the lock
+func (conn *Connection) updatePendingEv(ev *Event) {
+	conn.pendingEv = mergeEvent(conn.pendingEv, ev)
+}
+
+func (conn *Connection) MergeAndClearPendingEv(ev *Event) *Event {
+	var pendingEv *Event
+	conn.mu.Lock()
+	pendingEv, conn.pendingEv = conn.pendingEv, nil
+	conn.mu.Unlock()
+	return mergeEvent(ev, pendingEv)
+}
+
+func mergeEvent(ev1 *Event, ev2 *Event) *Event {
+	if ev1 == nil {
+		return ev2
+	}
+	if ev2 == nil {
+		return ev1
+	}
+
+	ret := *ev2
+	ret.configsUpdated = mergeConfigsUpdated(ev1.configsUpdated, ev2.configsUpdated)
+	return &ret
+}
+
+func mergeConfigsUpdated(updated1 map[model.ConfigKey]struct{}, updated2 map[model.ConfigKey]struct{}) map[model.ConfigKey]struct{} {
+	if updated1 == nil {
+		return updated2
+	}
+	if updated2 == nil {
+		return updated1
+	}
+
+	ret := make(map[model.ConfigKey]struct{}, len(updated1)+len(updated2))
+	for k, v := range updated1 {
+		ret[k] = v
+	}
+	for k, v := range updated2 {
+		ret[k] = v
 	}
 	return ret
 }
@@ -310,6 +355,7 @@ func (s *Server) StreamAggregatedResources(stream discovery.AggregatedDiscoveryS
 			}
 
 		case pushEv := <-con.pushChannel:
+			pushEv = con.MergeAndClearPendingEv(pushEv)
 			// It is called when config changes.
 			// This is not optimized yet - we should detect what changed based on event and only
 			// push resources that need to be pushed.

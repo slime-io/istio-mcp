@@ -197,7 +197,7 @@ func (hs *httpServer) SetConfigStore(store model.ConfigStore) {
 	hs.store = store
 }
 
-func (hs *httpServer) NotifyPush() {
+func (hs *httpServer) NotifyPush(req *mcp.PushRequest) {
 	hs.mux.Lock()
 	defer hs.mux.Unlock()
 	for _, conn := range hs.conns {

@@ -235,6 +235,10 @@ func (meta *ConfigMeta) Key() string {
 	return Key(meta.GroupVersionKind.Kind, meta.Name, meta.Namespace)
 }
 
+func (meta *ConfigMeta) ConfigKey() ConfigKey {
+	return ConfigKey{meta.GroupVersionKind, meta.Name, meta.Namespace}
+}
+
 func (c Config) DeepCopy() Config {
 	var clone Config
 	clone.ConfigMeta = c.ConfigMeta
@@ -243,6 +247,7 @@ func (c Config) DeepCopy() Config {
 }
 
 type ConfigStore interface {
+	Get(gvk resource.GroupVersionKind, namespace, name string) (*Config, error)
 	List(gvk resource.GroupVersionKind, namespace, ver string) ([]Config, string, error)
 	// Snapshot if pass all-namespace, will return a snapshot contains all ns's data and use the largest
 	// version of them as version.
@@ -258,6 +263,7 @@ type ConfigStore interface {
 // ConfigSnapshot may merge configs of different namespaces but same version into a single snapshot.
 type ConfigSnapshot interface {
 	Version() string
+	Config(gvk resource.GroupVersionKind, namespace, name string) *Config
 	Configs(gvk resource.GroupVersionKind, namespace, ver string) []Config
 	Empty() bool
 }
@@ -291,6 +297,14 @@ func (n NsConfigSnapshot) Version() string {
 	}
 
 	return ret
+}
+
+func (n NsConfigSnapshot) Config(gvk resource.GroupVersionKind, namespace, name string) *Config {
+	snap := n.snapshots[namespace]
+	if snap == nil {
+		return nil
+	}
+	return snap.Config(gvk, namespace, name)
 }
 
 func (n NsConfigSnapshot) Configs(gvk resource.GroupVersionKind, namespace, ver string) []Config {
@@ -341,6 +355,16 @@ func (s SimpleConfigSnapshot) Empty() bool {
 
 func (s SimpleConfigSnapshot) Version() string {
 	return s.version
+}
+
+// Config not that efficient
+func (s SimpleConfigSnapshot) Config(gvk resource.GroupVersionKind, namespace, name string) *Config {
+	for _, cfg := range s.configs {
+		if cfg.Name == name && cfg.Namespace == namespace && cfg.GroupVersionKind == gvk {
+			return &cfg
+		}
+	}
+	return nil
 }
 
 func (s SimpleConfigSnapshot) Configs(gvk resource.GroupVersionKind, namespace, ver string) []Config {
@@ -394,6 +418,18 @@ func (s *SimpleConfigStore) Version(ns string) string {
 	}
 
 	return ret
+}
+
+func (s *SimpleConfigStore) Get(gvk resource.GroupVersionKind, namespace, name string) (*Config, error) {
+	s.RLock()
+	snap := s.snaps[namespace]
+	s.RUnlock()
+
+	if snap == nil {
+		return nil, nil
+	}
+
+	return snap.Config(gvk, namespace, name), nil
 }
 
 func (s *SimpleConfigStore) List(gvk resource.GroupVersionKind, namespace, ver string) ([]Config, string, error) {

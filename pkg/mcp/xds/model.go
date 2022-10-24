@@ -72,6 +72,7 @@ type WatchedResource struct {
 	// TypeUrl type are watched.
 	// For endpoints the resource names will have list of clusters and for clusters it is empty.
 	ResourceNames []string
+	resourceSent  map[uint32]struct{}
 
 	// VersionSent is the version of the resource included in the last sent response.
 	// It corresponds to the [Cluster/Route/Listener]VersionSent in the XDS package.
@@ -112,6 +113,7 @@ func NewWatchedResource(typeUrl string) *WatchedResource {
 	ret := &WatchedResource{
 		TypeUrl:          typeUrl,
 		NonceSentRecords: make([]string, features.SentNonceRecordNum),
+		resourceSent:     map[uint32]struct{}{},
 	}
 	return ret
 }
@@ -138,6 +140,15 @@ func (w *WatchedResource) RecordNonceSent(nonceSent string) {
 			break
 		}
 	}
+}
+
+func (w *WatchedResource) RecordResourceSent(key model.ConfigKey) {
+	w.resourceSent[key.HashCode()] = struct{}{}
+}
+
+func (w *WatchedResource) IsResourceSent(key model.ConfigKey) bool {
+	_, ok := w.resourceSent[key.HashCode()]
+	return ok
 }
 
 // NodeMetadata defines the metadata associated with a proxy

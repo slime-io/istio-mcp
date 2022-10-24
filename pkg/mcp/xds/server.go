@@ -142,23 +142,34 @@ func (s *Server) SetConfigStore(store model.ConfigStore) {
 	s.pushContext.ConfigStore = store
 }
 
-func (s *Server) NotifyPush() {
-	push := s.globalPushContext()
-	s.xdsClientsMutex.RLock()
+func (s *Server) NotifyPush(req *mcp.PushRequest) {
+	ev := &Event{push: s.globalPushContext()}
+	if req != nil {
+		if len(req.RevChangeConfigs) > 0 {
+			if ev.configsUpdated == nil {
+				ev.configsUpdated = map[model.ConfigKey]struct{}{}
+			}
+		}
+		for k := range req.RevChangeConfigs {
+			ev.configsUpdated[k] = struct{}{}
+		}
+	}
 
-	total := len(s.xdsClients)
+	s.xdsClientsMutex.RLock()
+	xdsClients := make([]*Connection, 0, len(s.xdsClients))
+	for _, c := range s.xdsClients {
+		xdsClients = append(xdsClients, c)
+	}
+	s.xdsClientsMutex.RUnlock()
+
 	var newNotified int
-	for _, con := range s.xdsClients {
-		if con.Notify(&Event{
-			push: push,
-		}) {
+	for _, con := range xdsClients {
+		if con.Notify(ev) {
 			newNotified++
 		}
 	}
 
-	s.xdsClientsMutex.RUnlock()
-
-	log.Infof("Server.NotifyPush, total clients %d, new notified %d", total, newNotified)
+	log.Infof("Server.NotifyPush, total clients %d, new notified %d", len(xdsClients), newNotified)
 }
 
 // Register adds the ADS and EDS handles to the grpc server

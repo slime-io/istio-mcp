@@ -698,11 +698,13 @@ func (a *ADSC) ackTask(ackNotifyCh chan struct{}, ackList *list.List) {
 		for {
 			a.mutex.Lock()
 			f := ackList.Front()
+			if f != nil {
+			        ackList.Remove(f)
+			}
+			a.mutex.Unlock()
 			if f == nil {
 				break
 			}
-			ackList.Remove(f)
-			a.mutex.Unlock()
 
 			item := f.Value.(ackItem)
 			if err := item.stream.Send(item.ack); err != nil {
@@ -735,7 +737,6 @@ func (a *ADSC) ack(msg *discovery.DiscoveryResponse) {
 	}
 
 	if a.closed {
-		a.mutex.Unlock()
 		return
 	}
 	a.mutex.Lock()

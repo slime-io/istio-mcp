@@ -29,6 +29,10 @@ var (
 
 var _ fmt.Stringer = GroupVersionKind{}
 
+func (g GroupVersionKind) MarshalText() ([]byte, error) {
+	return []byte(g.String()), nil
+}
+
 func (g GroupVersionKind) String() string {
 	//if g.Group == "" {
 	//	g.Group = "core"

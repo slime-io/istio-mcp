@@ -592,8 +592,12 @@ func FilterByGvkAndNamespace(configs []Config, gvk resource.GroupVersionKind, na
 	return ret
 }
 
-func ObjectInRevision(o *Config, rev string) bool {
-	return RevisionMatch(o.Labels[IstioRevLabel], rev)
+func ObjectInRevision(c *Config, rev string) bool {
+	return RevisionMatch(ConfigIstioRev(c), rev)
+}
+
+func ConfigIstioRev(c *Config) string {
+	return c.Labels[IstioRevLabel]
 }
 
 func RevisionMatch(configRev, rev string) bool {

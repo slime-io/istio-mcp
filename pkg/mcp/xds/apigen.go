@@ -101,10 +101,13 @@ func (g *APIGenerator) Generate(proxy *Proxy, push *PushContext, w *WatchedResou
 	// This needs further consideration - I don't think XDS or MCP transports
 	// have a clear recommendation.
 
-	cfg, err := push.ConfigStore.List(rgvk, "", ver)
+	cfg, listRev, err := push.ConfigStore.List(rgvk, "", ver)
 	if err != nil {
 		log.Warnf("ADS: Error reading resource %s %v", w.TypeUrl, err)
 		return Resources{Version: newVer}
+	}
+	if listRev > newVer {
+		newVer = listRev
 	}
 
 	for _, c := range cfg {
@@ -137,10 +140,6 @@ func (g *APIGenerator) Generate(proxy *Proxy, push *PushContext, w *WatchedResou
 
 		// Right now model.Config is not a proto - until we change it, mcp.Resource.
 		// This also helps migrating MCP users.
-		if cRev := c.CurrentResourceVersion(); cRev > newVer {
-			newVer = cRev
-		}
-
 		b, err := configToResource(&c)
 		if err != nil {
 			log.Warna("Resource error ", err, " ", c.Namespace, "/", c.Name)

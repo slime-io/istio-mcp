@@ -243,7 +243,7 @@ func (c Config) DeepCopy() Config {
 }
 
 type ConfigStore interface {
-	List(gvk resource.GroupVersionKind, namespace, ver string) ([]Config, error)
+	List(gvk resource.GroupVersionKind, namespace, ver string) ([]Config, string, error)
 	// Snapshot if pass all-namespace, will return a snapshot contains all ns's data and use the largest
 	// version of them as version.
 	Snapshot(ns string) ConfigSnapshot
@@ -396,23 +396,36 @@ func (s *SimpleConfigStore) Version(ns string) string {
 	return ret
 }
 
-func (s *SimpleConfigStore) List(gvk resource.GroupVersionKind, namespace, ver string) ([]Config, error) {
-	var ret []Config
+func (s *SimpleConfigStore) List(gvk resource.GroupVersionKind, namespace, ver string) ([]Config, string, error) {
+	var (
+		ret    []Config
+		retVer string
+	)
+
+	addConfigs := func(cfgs ...Config) {
+		for _, cfg := range cfgs {
+			if cfg.ResourceVersion > retVer {
+				retVer = cfg.ResourceVersion
+			}
+			ret = append(ret, cfg)
+		}
+	}
 
 	s.RLock()
-
 	defer s.RUnlock()
+
 	if namespace == resource.AllNamespace {
 		for _, snap := range s.snaps {
-			ret = append(ret, snap.Configs(gvk, namespace, ver)...)
+			addConfigs(snap.Configs(gvk, namespace, ver)...)
 		}
 	} else {
 		snap := s.snaps[namespace]
 		if snap != nil {
-			ret = append(ret, snap.Configs(gvk, namespace, ver)...)
+			addConfigs(snap.Configs(gvk, namespace, ver)...)
 		}
 	}
-	return ret, nil
+
+	return ret, retVer, nil
 }
 
 func (s *SimpleConfigStore) Snapshot(ns string) ConfigSnapshot {

@@ -196,6 +196,42 @@ func (c *Config) CurrentResourceVersion() string {
 	}
 }
 
+// UpdateLabel see updateLabelOrAnno
+func (c *Config) UpdateLabel(k, v string) bool {
+	return c.updateLabelOrAnno(&c.Labels, k, v)
+}
+
+// UpdateAnnotation see updateLabelOrAnno
+func (c *Config) UpdateAnnotation(k, v string) bool {
+	return c.updateLabelOrAnno(&c.Annotations, k, v)
+}
+
+// updateLabelOrAnno do a cow update when necessary and return whether actually updated
+func (c *Config) updateLabelOrAnno(mp *map[string]string, k, v string) bool {
+	m := *mp
+	if m[k] == v { // consider empty value equals not-exist
+		return false
+	}
+
+	if m == nil {
+		m = map[string]string{}
+	} else {
+		mCopy := make(map[string]string, len(m))
+		for mk, mv := range m {
+			mCopy[mk] = mv
+		}
+		m = mCopy
+	}
+
+	if v == "" {
+		delete(m, k)
+	} else {
+		m[k] = v
+	}
+	*mp = m
+	return true
+}
+
 func (c *Config) UpdateAnnotationResourceVersion() string {
 	// check if c.ResourceVersion has changed (different from ver in anno)
 	// update version in annotation if that
@@ -621,4 +657,19 @@ func RevisionMatch(configRev, rev string) bool {
 		}
 	}
 	return false
+}
+
+// UpdateConfigToProxyRevision try to update config rev to the first non-empty proxy rev
+func UpdateConfigToProxyRevision(c *Config, proxyRev string) bool {
+	// find first non-empty rev
+	rev := proxyRev
+	for idx := strings.Index(proxyRev, ","); idx >= 0; {
+		rev = proxyRev[:idx]
+		proxyRev = proxyRev[idx+1:]
+		if rev != "" {
+			break
+		}
+	}
+
+	return c.UpdateLabel(IstioRevLabel, rev)
 }

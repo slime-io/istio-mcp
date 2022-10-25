@@ -121,12 +121,6 @@ func (g *APIGenerator) Generate(proxy *Proxy, push *PushContext, w *WatchedResou
 	}
 
 	if g.incPush && w.NonceSent != "" {
-		for _, cfg := range configs {
-			delete(revChangedConfigNames, resource.NamespacedName{
-				Name:      cfg.Name,
-				Namespace: cfg.Namespace,
-			})
-		}
 		for nn := range revChangedConfigNames {
 			cfg, err := push.ConfigStore.Get(rgvk, nn.Namespace, nn.Name)
 			if err != nil {
@@ -152,6 +146,10 @@ func (g *APIGenerator) Generate(proxy *Proxy, push *PushContext, w *WatchedResou
 		configsWrappers = append(configsWrappers, configWrapper{Config: cfg})
 	}
 	for _, cfg := range revChangedConfigs {
+		cfg.Spec = nil
+		if proxyRev := proxy.Metadata.IstioRevision; proxyRev != "" {
+			model.UpdateConfigToProxyRevision(&cfg, proxyRev)
+		}
 		configsWrappers = append(configsWrappers, configWrapper{Config: cfg, revChanged: true})
 	}
 
@@ -163,7 +161,7 @@ func (g *APIGenerator) Generate(proxy *Proxy, push *PushContext, w *WatchedResou
 			continue
 		}
 
-		if cw.revChanged || !proxyNeedsConfigs(proxy, cfg) {
+		if !(cw.revChanged || proxyNeedsConfigs(proxy, cfg)) {
 			continue
 		}
 

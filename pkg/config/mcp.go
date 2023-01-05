@@ -22,7 +22,8 @@ func McpToPilot(rev string, m *mcp.Resource) (*model.Config, error) {
 			Annotations:     m.Metadata.Annotations,
 		},
 	}
-	if !model.ObjectInRevision(c, rev) { // In case upstream does not support rev in node meta.
+	if rev != "" && !model.ObjectInRevision(c, rev) { // In case upstream does not support rev in node meta.
+		// empty rev will be considered as legacy client and NEEDS ALL CONFIGS
 		return nil, nil
 	}
 

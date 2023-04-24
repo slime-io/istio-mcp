@@ -3,6 +3,7 @@ package client
 import (
 	"context"
 	"encoding/json"
+	"github.com/gogo/protobuf/proto"
 	"io/ioutil"
 	"strings"
 	"sync"
@@ -258,6 +259,8 @@ type Config struct {
 	TypeConfigsHandler func(resource.GroupVersionKind, []*model.Config) error
 	InitReqTypes       []string
 
+	McpUnmarshaller map[resource.GroupVersionKind]func(*types.Any) (proto.Message, error)
+
 	// handle and convert resource to configs
 	resourceHandlers map[string]map[string]func(string, string, []byte) ([]*model.Config, error)
 	msgHandlers      map[string]func(*discovery.DiscoveryResponse) ([]*model.Config, error)
@@ -422,7 +425,7 @@ func (a *ADSC) handleMCP(gvk []string, rsc *any.Any, valBytes []byte) ([]*model.
 		return a.config.McpResourceHandler(gvk, m)
 	}
 
-	newCfg, err := config.McpToPilot(a.config.Revision, m)
+	newCfg, err := config.McpToPilot(a.config.Revision, m, gvk, a.config.McpUnmarshaller)
 	if err != nil {
 		log.Warnf("Invalid data %s of %v, err %v", string(valBytes), gvk, err)
 		return nil, err
@@ -431,7 +434,6 @@ func (a *ADSC) handleMCP(gvk []string, rsc *any.Any, valBytes []byte) ([]*model.
 		return nil, nil
 	}
 
-	newCfg.GroupVersionKind = resource.GroupVersionKind{Group: gvk[0], Version: gvk[1], Kind: gvk[2]}
 	if a.config.LocalCacheDir != "" {
 		defer func() error {
 			strResponse, err := json.MarshalIndent(newCfg, "  ", "  ")

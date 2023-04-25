@@ -20,12 +20,20 @@ var (
 		"",
 	).Get()
 
-	// MaxRecvMsgSize The max receive buffer size of gRPC received channel of Pilot in bytes.
-	MaxRecvMsgSize = env.RegisterIntVar(
+	// maxRecvMsgSizeVarInTypo for downwards compatibility
+	maxRecvMsgSizeVarInTypo = env.RegisterIntVar(
 		"MCP_XDS_GPRC_MAXRECVMSGSIZE",
 		4*1024*1024,
 		"Sets the max receive buffer size of gRPC stream in bytes.",
-	).Get()
+	)
+	maxRecvMsgSizeVar = env.RegisterIntVar(
+		"MCP_XDS_GRPC_MAXRECVMSGSIZE",
+		4*1024*1024,
+		"Sets the max receive buffer size of gRPC stream in bytes.",
+	)
+
+	// MaxRecvMsgSize The max receive buffer size of gRPC received channel of Pilot in bytes.
+	MaxRecvMsgSize = maxRecvMsgSizeVar.Get()
 
 	McpIncPush = env.RegisterBoolVar(
 		"MCP_INC_PUSH",
@@ -67,6 +75,12 @@ func initExtraRevMap() {
 }
 
 func init() {
+	if _, ok := maxRecvMsgSizeVar.Lookup(); !ok {
+		if v, ok := maxRecvMsgSizeVarInTypo.Lookup(); ok {
+			MaxRecvMsgSize = v
+		}
+	}
+
 	if extraRevMap != "" {
 		initExtraRevMap()
 	}

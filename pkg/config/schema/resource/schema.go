@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"strings"
 
-	gogotypes "github.com/gogo/protobuf/types"
-	"github.com/golang/protobuf/proto"
+	"google.golang.org/protobuf/proto"
+	"istio.io/istio-mcp/pkg/util"
 )
 
 const (
@@ -71,7 +71,7 @@ func TupleToGvk(t []string) GroupVersionKind {
 }
 
 func MsgTypeUrl(msg proto.Message) (string, error) {
-	a, err := gogotypes.MarshalAny(msg)
+	a, err := util.MessageToAny(msg)
 	if err != nil {
 		return "", err
 	}

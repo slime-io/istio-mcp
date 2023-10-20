@@ -11,7 +11,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/golang/protobuf/proto"
+	"google.golang.org/protobuf/proto"
 	//"sigs.k8s.io/yaml"
 
 	"gopkg.in/yaml.v2"

@@ -4,13 +4,14 @@ import (
 	"fmt"
 
 	discovery "github.com/envoyproxy/go-control-plane/envoy/service/discovery/v3"
-	gogotypes "github.com/gogo/protobuf/types"
-	"github.com/golang/protobuf/proto"
 	"github.com/golang/protobuf/ptypes/any"
+	"google.golang.org/protobuf/proto"
+	timestamppb "google.golang.org/protobuf/types/known/timestamppb"
 
 	istiomcp "istio.io/api/mcp/v1alpha1"
 
 	"istio.io/istio-mcp/pkg/model"
+	"istio.io/istio-mcp/pkg/util"
 )
 
 func ConfigsToDiscoveryResponse(version string, typeUrl string, configs []model.Config) (*discovery.DiscoveryResponse, error) {
@@ -45,15 +46,12 @@ func ConfigToResource(c *model.Config) (*istiomcp.Resource, error) {
 
 	// MCP, K8S and Istio configs use gogo configs
 	// On the wire it's the same as golang proto.
-	a, err := gogotypes.MarshalAny(c.Spec)
+	a, err := util.MessageToAny(c.Spec)
 	if err != nil {
 		return nil, err
 	}
 	r.Body = a
-	ts, err := gogotypes.TimestampProto(c.CreationTimestamp)
-	if err != nil {
-		return nil, err
-	}
+	ts := timestamppb.New(c.CreationTimestamp)
 	r.Metadata = &istiomcp.Metadata{
 		Name:        c.Namespace + "/" + c.Name,
 		CreateTime:  ts,

@@ -2,17 +2,18 @@ package config
 
 import (
 	"fmt"
-	"github.com/gogo/protobuf/proto"
-	"istio.io/istio-mcp/pkg/config/schema/resource"
 	"strings"
 
-	"github.com/gogo/protobuf/types"
+	"github.com/golang/protobuf/ptypes/any"
+	"google.golang.org/protobuf/proto"
+	"istio.io/istio-mcp/pkg/config/schema/resource"
+
 	mcp "istio.io/api/mcp/v1alpha1"
 
 	"istio.io/istio-mcp/pkg/model"
 )
 
-func McpToPilot(rev string, m *mcp.Resource, gvkArr []string, unmarshaller map[resource.GroupVersionKind]func(*types.Any) (proto.Message, error)) (*model.Config, error) {
+func McpToPilot(rev string, m *mcp.Resource, gvkArr []string, unmarshaller map[resource.GroupVersionKind]func(*any.Any) (proto.Message, error)) (*model.Config, error) {
 	if m == nil || m.Metadata == nil {
 		return &model.Config{}, nil
 	}
@@ -39,7 +40,7 @@ func McpToPilot(rev string, m *mcp.Resource, gvkArr []string, unmarshaller map[r
 	c.Namespace = nsn[0]
 	c.Name = nsn[1]
 	var err error
-	c.CreationTimestamp, err = types.TimestampFromProto(m.Metadata.CreateTime)
+	c.CreationTimestamp = m.Metadata.CreateTime.AsTime()
 	if err != nil {
 		return nil, err
 	}
@@ -52,11 +53,7 @@ func McpToPilot(rev string, m *mcp.Resource, gvkArr []string, unmarshaller map[r
 			}
 			c.Spec = spec
 		} else {
-			pb, err := types.EmptyAny(m.Body)
-			if err != nil {
-				return nil, err
-			}
-			err = types.UnmarshalAny(m.Body, pb)
+			pb, err := m.Body.UnmarshalNew()
 			if err != nil {
 				return nil, err
 			}

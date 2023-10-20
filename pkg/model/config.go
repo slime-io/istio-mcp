@@ -24,10 +24,10 @@ import (
 	"sync"
 	"time"
 
+	"google.golang.org/protobuf/proto"
 	"istio.io/istio-mcp/pkg/features"
 
 	udpa "github.com/cncf/udpa/go/udpa/type/v1"
-	"github.com/gogo/protobuf/proto"
 	"istio.io/istio-mcp/pkg/config/schema/resource"
 )
 

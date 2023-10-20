@@ -15,10 +15,12 @@
 package xds
 
 import (
-	"istio.io/istio-mcp/pkg/features"
 	"strings"
 
-	gogotypes "github.com/gogo/protobuf/types"
+	"google.golang.org/protobuf/types/known/timestamppb"
+	"istio.io/istio-mcp/pkg/features"
+	"istio.io/istio-mcp/pkg/util"
+
 	golangany "github.com/golang/protobuf/ptypes/any"
 
 	mcp "istio.io/api/mcp/v1alpha1"
@@ -180,7 +182,7 @@ func (g *APIGenerator) Generate(proxy *Proxy, push *PushContext, w *WatchedResou
 			log.Warna("Resource error ", err, " ", cfg.Namespace, "/", cfg.Name)
 			continue
 		}
-		bany, err := gogotypes.MarshalAny(b)
+		bany, err := util.MessageToAny(b)
 		if err == nil {
 			res = append(res, &golangany.Any{
 				TypeUrl: bany.TypeUrl,
@@ -237,16 +239,13 @@ func configToResource(c *model.Config) (*mcp.Resource, error) {
 	if c.Spec != nil {
 		// MCP, K8S and Istio configs use gogo configs
 		// On the wire it's the same as golang proto.
-		a, err := gogotypes.MarshalAny(c.Spec)
+		a, err := util.MessageToAny(c.Spec)
 		if err != nil {
 			return nil, err
 		}
 		r.Body = a
 	}
-	ts, err := gogotypes.TimestampProto(c.CreationTimestamp)
-	if err != nil {
-		return nil, err
-	}
+	ts := timestamppb.New(c.CreationTimestamp)
 	r.Metadata = &mcp.Metadata{
 		Name:        c.Namespace + "/" + c.Name,
 		CreateTime:  ts,

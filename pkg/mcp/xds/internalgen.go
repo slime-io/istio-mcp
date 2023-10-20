@@ -16,9 +16,11 @@ package xds
 
 import (
 	discovery "github.com/envoyproxy/go-control-plane/envoy/service/discovery/v3"
-	"github.com/golang/protobuf/proto"
 	"github.com/golang/protobuf/ptypes/any"
 	structpb "github.com/golang/protobuf/ptypes/struct"
+	"github.com/prometheus/common/log"
+	"google.golang.org/protobuf/proto"
+	"istio.io/istio-mcp/pkg/util"
 )
 
 const (
@@ -127,7 +129,11 @@ func (s *Server) PushAll(res *discovery.DiscoveryResponse) {
 func (sg *InternalGen) startPush(typeURL string, data []proto.Message) {
 	resources := make([]*any.Any, 0, len(data))
 	for _, v := range data {
-		resources = append(resources, MessageToAny(v))
+		anyObj, err := util.MessageToAny(v)
+		if err != nil {
+			log.Errorf("marshal %v met err %v", v, err)
+		}
+		resources = append(resources, anyObj)
 	}
 	dr := &discovery.DiscoveryResponse{
 		TypeUrl:   typeURL,

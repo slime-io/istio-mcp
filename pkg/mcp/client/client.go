@@ -3,15 +3,14 @@ package client
 import (
 	"context"
 	"encoding/json"
-	"github.com/gogo/protobuf/proto"
 	"io/ioutil"
 	"strings"
 	"sync"
 	"time"
 
 	discovery "github.com/envoyproxy/go-control-plane/envoy/service/discovery/v3"
-	"github.com/gogo/protobuf/types"
 	"github.com/golang/protobuf/ptypes/any"
+	"google.golang.org/protobuf/proto"
 	"istio.io/pkg/monitoring"
 
 	mcp "istio.io/api/mcp/v1alpha1"
@@ -259,7 +258,7 @@ type Config struct {
 	TypeConfigsHandler func(resource.GroupVersionKind, []*model.Config) error
 	InitReqTypes       []string
 
-	McpUnmarshaller map[resource.GroupVersionKind]func(*types.Any) (proto.Message, error)
+	McpUnmarshaller map[resource.GroupVersionKind]func(*any.Any) (proto.Message, error)
 
 	// handle and convert resource to configs
 	resourceHandlers map[string]map[string]func(string, string, []byte) ([]*model.Config, error)
@@ -413,10 +412,11 @@ func (a *ADSC) handleMCP(gvk []string, rsc *any.Any, valBytes []byte) ([]*model.
 	}
 
 	m := &mcp.Resource{}
-	err := types.UnmarshalAny(&types.Any{
+	err := (&any.Any{
 		TypeUrl: rsc.TypeUrl,
 		Value:   rsc.Value,
-	}, m)
+	}).UnmarshalTo(m)
+
 	if err != nil {
 		return nil, err
 	}

@@ -561,7 +561,9 @@ func (a *ADSC) handleRecv() {
 		}
 		// a.Received[msg.TypeUrl] = msg
 		a.mutex.Unlock()
-		a.ack(msg)
+		if !features.McpXdsNoAck {
+			a.ack(msg)
+		}
 
 		select {
 		case a.XDSUpdates <- msg:
@@ -699,7 +701,7 @@ func (a *ADSC) ackTask(ackNotifyCh chan struct{}, ackList *list.List) {
 			a.mutex.Lock()
 			f := ackList.Front()
 			if f != nil {
-			        ackList.Remove(f)
+				ackList.Remove(f)
 			}
 			a.mutex.Unlock()
 			if f == nil {

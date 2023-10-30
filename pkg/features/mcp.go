@@ -20,6 +20,12 @@ var (
 		"",
 	).Get()
 
+	McpXdsNoAck = env.RegisterBoolVar(
+		"MCP_XDS_NO_ACK",
+		false,
+		"if set to true, will not do ack for adsc",
+	).Get()
+
 	// maxRecvMsgSizeVarInTypo for downwards compatibility
 	maxRecvMsgSizeVarInTypo = env.RegisterIntVar(
 		"MCP_XDS_GPRC_MAXRECVMSGSIZE",

@@ -3,23 +3,21 @@ package client
 import (
 	"context"
 	"encoding/json"
-	"github.com/gogo/protobuf/proto"
-	"io/ioutil"
+	"os"
 	"strings"
 	"sync"
 	"time"
 
 	discovery "github.com/envoyproxy/go-control-plane/envoy/service/discovery/v3"
-	"github.com/gogo/protobuf/types"
-	"github.com/golang/protobuf/ptypes/any"
-	"istio.io/pkg/monitoring"
+	"google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/types/known/anypb"
 
 	mcp "istio.io/api/mcp/v1alpha1"
-	istiolog "istio.io/pkg/log"
-
 	"istio.io/istio-mcp/pkg/config"
 	"istio.io/istio-mcp/pkg/config/schema/resource"
 	"istio.io/istio-mcp/pkg/model"
+	"istio.io/libistio/pkg/monitoring"
+	istiolog "istio.io/libistio/pkg/log"
 )
 
 const (
@@ -27,7 +25,7 @@ const (
 	McpResourceTypeUrl = "type.googleapis.com/istio.mcp.v1alpha1.Resource"
 )
 
-var log = istiolog.RegisterScope("mcpc", "mcpc debugging", 0)
+var log = istiolog.RegisterScope("mcpc", "mcpc debugging")
 
 type Change int
 
@@ -57,13 +55,12 @@ const (
 const hookCtxValueKey = "_HOOK_CTX"
 
 var (
-	typeTag = monitoring.MustCreateLabel("type")
-	cfgTag  = monitoring.MustCreateLabel("cfg")
+	typeTag = monitoring.CreateLabel("type")
+	cfgTag  = monitoring.CreateLabel("cfg")
 
 	metricAdscChange = monitoring.NewSum(
 		"adsc_change",
 		".",
-		monitoring.WithLabels(typeTag),
 	)
 
 	metricAdscChanges = [ChangeLen]monitoring.Metric{}
@@ -243,7 +240,7 @@ func (a *ConfigStoreHandlerAdapter) TypeConfigsHandler(gvk resource.GroupVersion
 func logConfig(c *model.Config) {
 	if log.DebugEnabled() {
 		bs, err := json.MarshalIndent(c, "", "  ")
-		log.Debuga(string(bs), err)
+		log.Debugf("config: %s; err %v", string(bs), err)
 	}
 }
 
@@ -259,7 +256,7 @@ type Config struct {
 	TypeConfigsHandler func(resource.GroupVersionKind, []*model.Config) error
 	InitReqTypes       []string
 
-	McpUnmarshaller map[resource.GroupVersionKind]func(*types.Any) (proto.Message, error)
+	McpUnmarshaller map[resource.GroupVersionKind]func(*anypb.Any) (proto.Message, error)
 
 	// handle and convert resource to configs
 	resourceHandlers map[string]map[string]func(string, string, []byte) ([]*model.Config, error)
@@ -354,17 +351,21 @@ func NewAdsc(config *Config) *ADSC {
 		}
 	}
 
-	ret.config.RegisterResourceHandler(WildcardTypeUrl, McpResourceTypeUrl, func(msgTypeUrl string, resourceTypeUrl string, bytes []byte) ([]*model.Config, error) {
-		configs, err := ret.handleMCP(resource.TypeUrlToGvkTuple(msgTypeUrl), &any.Any{
-			TypeUrl: resourceTypeUrl,
-			Value:   bytes,
-		}, bytes)
-		if err != nil {
-			log.Warnf("Error handling received MCP config %v", err)
-			return nil, err
-		}
-		return configs, nil
-	})
+	ret.config.RegisterResourceHandler(
+		WildcardTypeUrl,
+		McpResourceTypeUrl,
+		func(msgTypeUrl string, resourceTypeUrl string, bytes []byte) ([]*model.Config, error) {
+			configs, err := ret.handleMCP(resource.TypeUrlToGvkTuple(msgTypeUrl), &anypb.Any{
+				TypeUrl: resourceTypeUrl,
+				Value:   bytes,
+			}, bytes)
+			if err != nil {
+				log.Warnf("Error handling received MCP config %v", err)
+				return nil, err
+			}
+			return configs, nil
+		},
+	)
 	return ret
 }
 
@@ -407,16 +408,13 @@ func (a *ADSC) HandleResponse(disResp *discovery.DiscoveryResponse) error {
 	// XXX handle envoy resources?
 }
 
-func (a *ADSC) handleMCP(gvk []string, rsc *any.Any, valBytes []byte) ([]*model.Config, error) {
+func (a *ADSC) handleMCP(gvk []string, rsc *anypb.Any, valBytes []byte) ([]*model.Config, error) {
 	if len(gvk) != 3 {
 		return nil, nil // Not MCP
 	}
 
 	m := &mcp.Resource{}
-	err := types.UnmarshalAny(&types.Any{
-		TypeUrl: rsc.TypeUrl,
-		Value:   rsc.Value,
-	}, m)
+	err := anypb.UnmarshalTo(rsc, m, proto.UnmarshalOptions{})
 	if err != nil {
 		return nil, err
 	}
@@ -440,7 +438,7 @@ func (a *ADSC) handleMCP(gvk []string, rsc *any.Any, valBytes []byte) ([]*model.
 			if err != nil {
 				return err
 			}
-			err = ioutil.WriteFile(a.config.LocalCacheDir+"_res."+
+			err = os.WriteFile(a.config.LocalCacheDir+"_res."+
 				newCfg.GroupVersionKind.Kind+"."+newCfg.Namespace+"."+newCfg.Name+".json", strResponse, 0o644)
 
 			return err

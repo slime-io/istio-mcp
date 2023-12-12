@@ -4,12 +4,11 @@ import (
 	"fmt"
 
 	discovery "github.com/envoyproxy/go-control-plane/envoy/service/discovery/v3"
-	gogotypes "github.com/gogo/protobuf/types"
-	"github.com/golang/protobuf/proto"
-	"github.com/golang/protobuf/ptypes/any"
+	"google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/types/known/anypb"
+	"google.golang.org/protobuf/types/known/timestamppb"
 
-	istiomcp "istio.io/api/mcp/v1alpha1"
-
+	mcpv1alpha1 "istio.io/api/mcp/v1alpha1"
 	"istio.io/istio-mcp/pkg/model"
 )
 
@@ -27,10 +26,10 @@ func ConfigsToDiscoveryResponse(version string, typeUrl string, configs []model.
 		// bs, err := proto.Marshal(config.Spec)
 		mcpResource, err := ConfigToResource(&config)
 		if err != nil {
-			return nil, fmt.Errorf("marshal %v met err %v", config.ConfigMeta, err)
+			return nil, fmt.Errorf("marshal %v met err %v", config.Meta, err)
 		}
 		bs, err := proto.Marshal(mcpResource)
-		ret.Resources = append(ret.Resources, &any.Any{
+		ret.Resources = append(ret.Resources, &anypb.Any{
 			TypeUrl: "type.googleapis.com/istio.mcp.v1alpha1.Resource",
 			Value:   bs,
 		})
@@ -40,21 +39,17 @@ func ConfigsToDiscoveryResponse(version string, typeUrl string, configs []model.
 }
 
 // Convert from model.Config, which has no associated proto, to MCP Resource proto.
-func ConfigToResource(c *model.Config) (*istiomcp.Resource, error) {
-	r := &istiomcp.Resource{}
+func ConfigToResource(c *model.Config) (*mcpv1alpha1.Resource, error) {
+	r := &mcpv1alpha1.Resource{}
 
-	// MCP, K8S and Istio configs use gogo configs
-	// On the wire it's the same as golang proto.
-	a, err := gogotypes.MarshalAny(c.Spec)
+	a, err := model.ToProto(c.Spec)
 	if err != nil {
 		return nil, err
 	}
+
 	r.Body = a
-	ts, err := gogotypes.TimestampProto(c.CreationTimestamp)
-	if err != nil {
-		return nil, err
-	}
-	r.Metadata = &istiomcp.Metadata{
+	ts := timestamppb.New(c.CreationTimestamp)
+	r.Metadata = &mcpv1alpha1.Metadata{
 		Name:        c.Namespace + "/" + c.Name,
 		CreateTime:  ts,
 		Version:     c.ResourceVersion,

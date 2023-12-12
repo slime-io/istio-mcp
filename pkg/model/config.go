@@ -17,18 +17,16 @@ package model
 import (
 	"bytes"
 	"encoding/binary"
-	"fmt"
 	"hash/crc32"
 	"sort"
 	"strings"
 	"sync"
-	"time"
-
-	"istio.io/istio-mcp/pkg/features"
 
 	udpa "github.com/cncf/udpa/go/udpa/type/v1"
-	"github.com/gogo/protobuf/proto"
+
 	"istio.io/istio-mcp/pkg/config/schema/resource"
+	"istio.io/istio-mcp/pkg/features"
+	"istio.io/libistio/pkg/config"
 )
 
 const (
@@ -64,6 +62,14 @@ func (key ConfigKey) HashCode() uint32 {
 	return result
 }
 
+func Key(cfg *Config) ConfigKey {
+	return ConfigKey{
+		Kind:      cfg.GroupVersionKind,
+		Name:      cfg.Name,
+		Namespace: cfg.Namespace,
+	}
+}
+
 // ConfigsOfKind extracts configs of the specified kind.
 func ConfigsOfKind(configs map[ConfigKey]struct{}, kind resource.GroupVersionKind) map[ConfigKey]struct{} {
 	ret := make(map[ConfigKey]struct{})
@@ -90,52 +96,7 @@ func ConfigNamesOfKind(configs map[ConfigKey]struct{}, kind resource.GroupVersio
 	return ret
 }
 
-// ConfigMeta is metadata attached to each configuration unit.
-// The revision is optional, and if provided, identifies the
-// last update operation on the object.
-type ConfigMeta struct {
-	// GroupVersionKind is a short configuration name that matches the content message type
-	// (e.g. "route-rule")
-	GroupVersionKind resource.GroupVersionKind `json:"type,omitempty"`
-
-	// Name is a unique immutable identifier in a namespace
-	Name string `json:"name,omitempty"`
-
-	// Namespace defines the space for names (optional for some types),
-	// applications may choose to use namespaces for a variety of purposes
-	// (security domains, fault domains, organizational domains)
-	Namespace string `json:"namespace,omitempty"`
-
-	// Domain defines the suffix of the fully qualified name past the namespace.
-	// Domain is not a part of the unique key unlike name and namespace.
-	Domain string `json:"domain,omitempty"`
-
-	// Map of string keys and values that can be used to organize and categorize
-	// (scope and select) objects.
-	Labels map[string]string `json:"labels,omitempty"`
-
-	// Annotations is an unstructured key value map stored with a resource that may be
-	// set by external tools to store and retrieve arbitrary metadata. They are not
-	// queryable and should be preserved when modifying objects.
-	Annotations map[string]string `json:"annotations,omitempty"`
-
-	// ResourceVersion is an opaque identifier for tracking updates to the config registry.
-	// The implementation may use a change index or a commit log for the revision.
-	// The config client should not make any assumptions about revisions and rely only on
-	// exact equality to implement optimistic concurrency of read-write operations.
-	//
-	// The lifetime of an object of a particular revision depends on the underlying data store.
-	// The data store may compactify old revisions in the interest of storage optimization.
-	//
-	// An empty revision carries a special meaning that the associated object has
-	// not been stored and assigned a revision.
-	ResourceVersion string `json:"resourceVersion,omitempty"`
-
-	// CreationTimestamp records the creation time
-	CreationTimestamp time.Time `json:"creationTimestamp,omitempty"`
-}
-
-func SerializeConfigMeta(cm ConfigMeta) []byte {
+func SerializeConfigMeta(cm Meta) []byte {
 	buf := &bytes.Buffer{}
 
 	sep := func() {
@@ -176,17 +137,13 @@ func SerializeConfigMeta(cm ConfigMeta) []byte {
 	return buf.Bytes()
 }
 
-// Config is a configuration unit consisting of the type of configuration, the
-// key identifier that is unique per type, and the content represented as a
-// protobuf message.
-type Config struct {
-	ConfigMeta
+type Config = config.Config
+type Meta = config.Meta
 
-	// Spec holds the configuration object as a gogo protobuf message
-	Spec proto.Message
-}
+var ToProto = config.ToProto
+var PilotConfigToResource = config.PilotConfigToResource
 
-func (c *Config) CurrentResourceVersion() string {
+func CurrentResourceVersion(c *Config) string {
 	// c.ResourceVersion: prev
 	// resource version in annotation: curr/new
 	if annos := c.Annotations; annos == nil {
@@ -196,18 +153,61 @@ func (c *Config) CurrentResourceVersion() string {
 	}
 }
 
-// UpdateLabel see updateLabelOrAnno
-func (c *Config) UpdateLabel(k, v string) bool {
-	return c.updateLabelOrAnno(&c.Labels, k, v)
+func ObjectInRevision(c *Config, rev string) bool {
+	return RevisionMatch(ConfigIstioRev(c), rev)
 }
 
-// UpdateAnnotation see updateLabelOrAnno
-func (c *Config) UpdateAnnotation(k, v string) bool {
-	return c.updateLabelOrAnno(&c.Annotations, k, v)
+func ConfigIstioRev(c *Config) string {
+	return c.Labels[IstioRevLabel]
 }
 
-// updateLabelOrAnno do a cow update when necessary and return whether actually updated
-func (c *Config) updateLabelOrAnno(mp *map[string]string, k, v string) bool {
+func RevisionMatch(configRev, rev string) bool {
+	if configRev == "" { // This is a global object
+		return !features.StrictIstioRev || // global obj always included in non-strict mode
+			configRev == rev
+	}
+
+	// Otherwise, only return true if ","-joined rev contains config rev
+	for rev != "" {
+		idx := strings.Index(rev, ",")
+		var cur string
+		if idx >= 0 {
+			cur, rev = rev[:idx], rev[idx+1:]
+		} else {
+			cur, rev = rev, ""
+		}
+
+		if configRev == cur {
+			return true
+		}
+	}
+	return false
+}
+
+// UpdateConfigToProxyRevision try to update config rev to the first non-empty proxy rev
+func UpdateConfigToProxyRevision(c *Config, proxyRev string) bool {
+	// find first non-empty rev
+	rev := proxyRev
+	for idx := strings.Index(proxyRev, ","); idx >= 0; {
+		rev = proxyRev[:idx]
+		proxyRev = proxyRev[idx+1:]
+		if rev != "" {
+			break
+		}
+	}
+
+	return UpdateConfigLabel(c, IstioRevLabel, rev)
+}
+
+func UpdateConfigLabel(c *Config, key, value string) bool {
+	return updayeConfigAnnoOrLabel(&c.Labels, key, value)
+}
+
+func UpdateConfigAnnotation(c *Config, key, value string) bool {
+	return updayeConfigAnnoOrLabel(&c.Annotations, key, value)
+}
+
+func updayeConfigAnnoOrLabel(mp *map[string]string, k, v string) bool {
 	m := *mp
 	if m[k] == v { // consider empty value equals not-exist
 		return false
@@ -232,7 +232,7 @@ func (c *Config) updateLabelOrAnno(mp *map[string]string, k, v string) bool {
 	return true
 }
 
-func (c *Config) UpdateAnnotationResourceVersion() string {
+func UpdateAnnotationResourceVersion(c *Config) string {
 	// check if c.ResourceVersion has changed (different from ver in anno)
 	// update version in annotation if that
 	annos := c.Annotations
@@ -260,26 +260,27 @@ func (c *Config) UpdateAnnotationResourceVersion() string {
 	return prev
 }
 
-// Key function for the configuration objects
-func Key(typ, name, namespace string) string {
-	return fmt.Sprintf("%s/%s/%s", typ, namespace, name)
-}
+func FilterByGvkAndNamespace(configs []Config, gvk resource.GroupVersionKind, namespace, ver string) []Config {
+	var (
+		allGvk = gvk == resource.AllGvk
+		allNs  = namespace == resource.AllNamespace
+	)
 
-// Key is the unique identifier for a configuration object
-// TODO: this is *not* unique - needs the version and group
-func (meta *ConfigMeta) Key() string {
-	return Key(meta.GroupVersionKind.Kind, meta.Name, meta.Namespace)
-}
+	if allGvk && allNs {
+		return configs
+	}
 
-func (meta *ConfigMeta) ConfigKey() ConfigKey {
-	return ConfigKey{meta.GroupVersionKind, meta.Name, meta.Namespace}
-}
+	matcher := func(c Config) bool {
+		return (allGvk || c.GroupVersionKind == gvk) && (allNs || c.Namespace == namespace) && (ver == "" || c.ResourceVersion > ver)
+	}
 
-func (c Config) DeepCopy() Config {
-	var clone Config
-	clone.ConfigMeta = c.ConfigMeta
-	clone.Spec = proto.Clone(c.Spec)
-	return clone
+	var ret []Config
+	for _, c := range configs {
+		if matcher(c) {
+			ret = append(ret, c)
+		}
+	}
+	return ret
 }
 
 type ConfigStore interface {
@@ -603,73 +604,4 @@ func (s *RecordEmptyConfigStore) Update(ns string, snapshot ConfigSnapshot) Conf
 	}
 
 	return ret
-}
-
-func FilterByGvkAndNamespace(configs []Config, gvk resource.GroupVersionKind, namespace, ver string) []Config {
-	var (
-		allGvk = gvk == resource.AllGvk
-		allNs  = namespace == resource.AllNamespace
-	)
-
-	if allGvk && allNs {
-		return configs
-	}
-
-	matcher := func(c Config) bool {
-		return (allGvk || c.GroupVersionKind == gvk) && (allNs || c.Namespace == namespace) && (ver == "" || c.ResourceVersion > ver)
-	}
-
-	var ret []Config
-	for _, c := range configs {
-		if matcher(c) {
-			ret = append(ret, c)
-		}
-	}
-	return ret
-}
-
-func ObjectInRevision(c *Config, rev string) bool {
-	return RevisionMatch(ConfigIstioRev(c), rev)
-}
-
-func ConfigIstioRev(c *Config) string {
-	return c.Labels[IstioRevLabel]
-}
-
-func RevisionMatch(configRev, rev string) bool {
-	if configRev == "" { // This is a global object
-		return !features.StrictIstioRev || // global obj always included in non-strict mode
-			configRev == rev
-	}
-
-	// Otherwise, only return true if ","-joined rev contains config rev
-	for rev != "" {
-		idx := strings.Index(rev, ",")
-		var cur string
-		if idx >= 0 {
-			cur, rev = rev[:idx], rev[idx+1:]
-		} else {
-			cur, rev = rev, ""
-		}
-
-		if configRev == cur {
-			return true
-		}
-	}
-	return false
-}
-
-// UpdateConfigToProxyRevision try to update config rev to the first non-empty proxy rev
-func UpdateConfigToProxyRevision(c *Config, proxyRev string) bool {
-	// find first non-empty rev
-	rev := proxyRev
-	for idx := strings.Index(proxyRev, ","); idx >= 0; {
-		rev = proxyRev[:idx]
-		proxyRev = proxyRev[idx+1:]
-		if rev != "" {
-			break
-		}
-	}
-
-	return c.UpdateLabel(IstioRevLabel, rev)
 }

@@ -4,7 +4,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"istio.io/istio-mcp/pkg/config/schema/resource"
 	"strconv"
 	"sync"
 	"sync/atomic"
@@ -13,20 +12,20 @@ import (
 	core "github.com/envoyproxy/go-control-plane/envoy/config/core/v3"
 	discovery "github.com/envoyproxy/go-control-plane/envoy/service/discovery/v3"
 	"github.com/google/uuid"
-	uatomic "go.uber.org/atomic"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/peer"
 	"google.golang.org/grpc/status"
+
+	"istio.io/istio-mcp/pkg/config/schema/resource"
 	"istio.io/istio-mcp/pkg/features"
 	"istio.io/istio-mcp/pkg/mcp"
-	istiolog "istio.io/pkg/log"
-
 	"istio.io/istio-mcp/pkg/model"
+	istiolog "istio.io/libistio/pkg/log"
 )
 
 var (
-	xdsLog = istiolog.RegisterScope("mcp-xds", "ads debugging", 0)
+	xdsLog = istiolog.RegisterScope("mcp-xds", "ads debugging")
 
 	// SendTimeout is the max time to wait for a ADS send to complete. This helps detect
 	// clients in a bad state (not reading). In future it may include checking for ACK
@@ -35,8 +34,6 @@ var (
 	versionMutex sync.RWMutex
 	// version is the timestamp of the last registry event.
 	version = "0"
-	// versionNum counts versions
-	versionNum = uatomic.NewUint64(0)
 )
 
 func nonce(noncePrefix string) string {
@@ -57,13 +54,8 @@ type Event struct {
 	// Push context to use for the push.
 	push *PushContext
 
-	// start represents the time a push was started.
-	start time.Time
-
 	// function to call once a push is finished. This must be called or future changes may be blocked.
 	done func()
-
-	noncePrefix string
 }
 
 // Connection holds information about connected client.
@@ -533,11 +525,7 @@ func (s *Server) pushConnection(con *Connection, pushEv *Event) error {
 
 // ProxyNeedsPush check if a proxy needs push for this push event.
 func ProxyNeedsPush(proxy *Proxy, pushEv *Event) bool {
-	if ConfigAffectsProxy(pushEv, proxy) {
-		return true
-	}
-
-	return false
+	return ConfigAffectsProxy(pushEv, proxy)
 }
 
 // ConfigAffectsProxy checks if a pushEv will affect a specified proxy. That means whether the push will be performed

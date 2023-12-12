@@ -1,7 +1,6 @@
 package xds
 
 import (
-	"bytes"
 	"encoding/json"
 	"fmt"
 	"net"
@@ -9,16 +8,14 @@ import (
 	"time"
 
 	discovery "github.com/envoyproxy/go-control-plane/envoy/service/discovery/v3"
-	"github.com/golang/protobuf/proto"
-	"github.com/golang/protobuf/ptypes/any"
+	"google.golang.org/protobuf/encoding/protojson"
+	"google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/types/known/anypb"
+	"google.golang.org/protobuf/types/known/structpb"
+
 	"istio.io/istio-mcp/pkg/features"
-	"istio.io/pkg/log"
-
-	structpb "github.com/golang/protobuf/ptypes/struct"
-	// gogojsonpb "github.com/gogo/protobuf/jsonpb"
-	"github.com/golang/protobuf/jsonpb"
-
 	"istio.io/istio-mcp/pkg/model"
+	"istio.io/libistio/pkg/log"
 )
 
 const (
@@ -46,7 +43,7 @@ func (l *StringList) UnmarshalJSON(data []byte) error {
 
 // Resources is an alias for array of marshaled resources.
 type Resources struct {
-	Data    []*any.Any
+	Data    []*anypb.Any
 	Version string
 }
 
@@ -332,28 +329,13 @@ func (node *Proxy) DiscoverIPVersions() {
 }
 
 // MessageToAny converts from proto message to proto Any
-func MessageToAny(msg proto.Message) *any.Any {
-	out, err := MessageToAnyWithError(msg)
+func MessageToAny(msg proto.Message) *anypb.Any {
+	out, err := anypb.New(msg)
 	if err != nil {
-		log.Error(fmt.Sprintf("error marshaling Any %s: %v", msg.String(), err))
+		log.Errorf("Failed to convert message %v to Any: %v", msg, err)
 		return nil
 	}
 	return out
-}
-
-// MessageToAnyWithError converts from proto message to proto Any
-func MessageToAnyWithError(msg proto.Message) (*any.Any, error) {
-	b := proto.NewBuffer(nil)
-	b.SetDeterministic(true)
-	err := b.Marshal(msg)
-	if err != nil {
-		return nil, err
-	}
-	return &any.Any{
-		// nolint: staticcheck
-		TypeUrl: "type.googleapis.com/" + proto.MessageName(msg),
-		Value:   b.Bytes(),
-	}, nil
 }
 
 // listEqualUnordered checks that two lists contain all the same elements
@@ -396,13 +378,13 @@ func ParseMetadata(metadata *structpb.Struct) (*NodeMetadata, error) {
 		return &NodeMetadata{}, nil
 	}
 
-	buf := &bytes.Buffer{}
-	if err := (&jsonpb.Marshaler{OrigName: true}).Marshal(buf, metadata); err != nil {
+	bs, err := protojson.Marshal(metadata)
+	if err != nil {
 		return nil, fmt.Errorf("failed to read node metadata %v: %v", metadata, err)
 	}
 	meta := &BootstrapNodeMetadata{}
-	if err := json.Unmarshal(buf.Bytes(), meta); err != nil {
-		return nil, fmt.Errorf("failed to unmarshal node metadata (%v): %v", buf.String(), err)
+	if err := json.Unmarshal(bs, meta); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal node metadata (%v): %v", string(bs), err)
 	}
 	return &meta.NodeMetadata, nil
 }

@@ -13,10 +13,10 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/reflection"
 	"google.golang.org/grpc/status"
-	"istio.io/istio-mcp/pkg/mcp"
-	"istio.io/pkg/log"
 
+	"istio.io/istio-mcp/pkg/mcp"
 	"istio.io/istio-mcp/pkg/model"
+	"istio.io/libistio/pkg/log"
 )
 
 const (
@@ -72,8 +72,6 @@ type Server struct {
 
 	// mutex used for config update scheduling (former cache update mutex)
 	updateMutex sync.RWMutex
-	mutex       sync.RWMutex
-	serverReady bool
 
 	// xdsClients reflect active gRPC channels, for both ADS and EDS.
 	xdsClients      map[string]*Connection
@@ -195,10 +193,9 @@ func (s *Server) Start(ctx context.Context) {
 		go func() {
 			err = gs.Serve(lis)
 			if err != nil {
-				log.Infoa("Serve done ", err)
+				log.Infof("xds server return err: %v", err)
 			}
 		}()
-		return
 	}()
 }
 

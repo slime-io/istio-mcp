@@ -15,17 +15,14 @@
 package xds
 
 import (
-	"istio.io/istio-mcp/pkg/features"
 	"strings"
 
-	gogotypes "github.com/gogo/protobuf/types"
-	golangany "github.com/golang/protobuf/ptypes/any"
-
-	mcp "istio.io/api/mcp/v1alpha1"
-	"istio.io/pkg/log"
+	"google.golang.org/protobuf/types/known/anypb"
 
 	"istio.io/istio-mcp/pkg/config/schema/resource"
+	"istio.io/istio-mcp/pkg/features"
 	"istio.io/istio-mcp/pkg/model"
+	"istio.io/libistio/pkg/log"
 )
 
 // Experimental/WIP: this is not yet ready for production use.
@@ -56,7 +53,7 @@ type APIGenerator struct {
 //
 // Names are based on the current resource naming in istiod stores.
 func (g *APIGenerator) Generate(proxy *Proxy, push *PushContext, w *WatchedResource, updates XdsUpdates) Resources {
-	res := []*golangany.Any{}
+	res := []*anypb.Any{}
 	var ver string
 	if g.incPush {
 		ver = w.NonceSent
@@ -101,12 +98,12 @@ func (g *APIGenerator) Generate(proxy *Proxy, push *PushContext, w *WatchedResou
 	// This needs further consideration - I don't think XDS or MCP transports
 	// have a clear recommendation.
 
-	revChangedConfigNames := map[resource.NamespacedName]struct{}{}
+	revChangedConfigNames := map[model.NamespacedName]struct{}{}
 	var revChangedConfigs []model.Config
 	if g.incPush && w.NonceSent != "" { // in init push we do not care rev changed configs
 		for k := range updates {
 			if k.Kind == rgvk {
-				revChangedConfigNames[resource.NamespacedName{Name: k.Name, Namespace: k.Namespace}] = struct{}{}
+				revChangedConfigNames[model.NamespacedName{Name: k.Name, Namespace: k.Namespace}] = struct{}{}
 			}
 		}
 	}
@@ -128,7 +125,7 @@ func (g *APIGenerator) Generate(proxy *Proxy, push *PushContext, w *WatchedResou
 				return Resources{Version: newVer}
 			}
 
-			if cfg != nil && w.IsResourceSent(cfg.ConfigKey()) && !proxyNeedsConfigs(proxy, *cfg) {
+			if cfg != nil && w.IsResourceSent(model.Key(cfg)) && !proxyNeedsConfigs(proxy, *cfg) {
 				cfgCopy := *cfg
 				cfgCopy.Spec = nil
 				revChangedConfigs = append(revChangedConfigs, cfgCopy)
@@ -167,29 +164,26 @@ func (g *APIGenerator) Generate(proxy *Proxy, push *PushContext, w *WatchedResou
 
 		if !cw.revChanged {
 			// only "normally" listed configs affect ver-update
-			if cRev := cfg.CurrentResourceVersion(); cRev > newVer {
+			if cRev := model.CurrentResourceVersion(&cfg); cRev > newVer {
 				newVer = cRev
 			}
 		}
 
 		// Right now model.Config is not a proto - until we change it, mcp.Resource.
 		// This also helps migrating MCP users.
-
-		b, err := configToResource(&cfg)
+		b, err := model.PilotConfigToResource(&cfg)
 		if err != nil {
-			log.Warna("Resource error ", err, " ", cfg.Namespace, "/", cfg.Name)
+			log.Warnf("ADS: Convert pilot config %v/%v to mcp resource error: %v", cfg.Namespace, cfg.Name, err)
 			continue
 		}
-		bany, err := gogotypes.MarshalAny(b)
-		if err == nil {
-			res = append(res, &golangany.Any{
-				TypeUrl: bany.TypeUrl,
-				Value:   bany.Value,
-			})
-			w.RecordResourceSent(cfg.ConfigKey())
-		} else {
-			log.Warna("Any ", err)
+		any, err := anypb.New(b)
+		if err != nil {
+			// log.Warnf("ADS: Any error %v %v/%v", err, cfg.Namespace, cfg.Name)
+			log.Warnf("ADS: create any of %s error %v", b.String(), err)
+			continue
 		}
+		res = append(res, any)
+		w.RecordResourceSent(model.Key(&cfg))
 	}
 
 	// TODO: MeshConfig, current dynamic ProxyConfig (for this proxy), Networks
@@ -227,33 +221,4 @@ func proxyNeedsConfigs(proxy *Proxy, cfg model.Config) bool {
 	}
 
 	return false
-}
-
-// Convert from model.Config, which has no associated proto, to MCP Resource proto.
-// TODO: define a proto matching Config - to avoid useless superficial conversions.
-func configToResource(c *model.Config) (*mcp.Resource, error) {
-	r := &mcp.Resource{}
-
-	if c.Spec != nil {
-		// MCP, K8S and Istio configs use gogo configs
-		// On the wire it's the same as golang proto.
-		a, err := gogotypes.MarshalAny(c.Spec)
-		if err != nil {
-			return nil, err
-		}
-		r.Body = a
-	}
-	ts, err := gogotypes.TimestampProto(c.CreationTimestamp)
-	if err != nil {
-		return nil, err
-	}
-	r.Metadata = &mcp.Metadata{
-		Name:        c.Namespace + "/" + c.Name,
-		CreateTime:  ts,
-		Version:     c.ResourceVersion,
-		Labels:      c.Labels,
-		Annotations: c.Annotations,
-	}
-
-	return r, nil
 }

@@ -4,8 +4,10 @@ import (
 	"fmt"
 	"strings"
 
-	gogotypes "github.com/gogo/protobuf/types"
-	"github.com/golang/protobuf/proto"
+	"google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/types/known/anypb"
+
+	"istio.io/libistio/pkg/config"
 )
 
 const (
@@ -15,11 +17,7 @@ const (
 
 var GroupK8sCore = "core"
 
-type GroupVersionKind struct {
-	Group   string `json:"group"`
-	Version string `json:"version"`
-	Kind    string `json:"kind"`
-}
+type GroupVersionKind = config.GroupVersionKind
 
 var (
 	EmptyGvk     = GroupVersionKind{}
@@ -28,21 +26,6 @@ var (
 )
 
 var _ fmt.Stringer = GroupVersionKind{}
-
-func (g GroupVersionKind) MarshalText() ([]byte, error) {
-	return []byte(g.String()), nil
-}
-
-func (g GroupVersionKind) String() string {
-	//if g.Group == "" {
-	//	g.Group = "core"
-	//}
-	if g.Version == "" {
-		return g.Group + "/" + g.Kind
-	} else {
-		return g.Group + "/" + g.Version + "/" + g.Kind
-	}
-}
 
 func TypeUrlToGvkTuple(typeUrl string) []string {
 	return strings.SplitN(typeUrl, "/", 3)
@@ -71,11 +54,11 @@ func TupleToGvk(t []string) GroupVersionKind {
 }
 
 func MsgTypeUrl(msg proto.Message) (string, error) {
-	a, err := gogotypes.MarshalAny(msg)
+	any, err := anypb.New(msg)
 	if err != nil {
 		return "", err
 	}
-	return a.TypeUrl, nil
+	return any.GetTypeUrl(), nil
 }
 
 func MsgGvk(msg proto.Message) (GroupVersionKind, error) {
@@ -96,7 +79,11 @@ func MayRevertK8sGvk(gvk GroupVersionKind) GroupVersionKind {
 		return gvk
 	}
 
-	return GroupVersionKind{"", tup[2], tup[3]}
+	return GroupVersionKind{
+		Group:   "",
+		Version: tup[2],
+		Kind:    tup[3],
+	}
 }
 
 func ConvertShortK8sGvk(gvk GroupVersionKind) GroupVersionKind {

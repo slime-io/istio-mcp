@@ -4,7 +4,7 @@ import (
 	"strings"
 	"time"
 
-	"istio.io/pkg/env"
+	"istio.io/libistio/pkg/env"
 )
 
 var (

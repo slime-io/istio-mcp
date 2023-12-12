@@ -4,11 +4,10 @@ import (
 	"fmt"
 	"strings"
 
-	"istio.io/pkg/log"
-
 	"istio.io/istio-mcp/pkg/mcp"
 	mcphttp "istio.io/istio-mcp/pkg/mcp/http"
 	mcpxds "istio.io/istio-mcp/pkg/mcp/xds"
+	"istio.io/libistio/pkg/log"
 )
 
 type Options struct {

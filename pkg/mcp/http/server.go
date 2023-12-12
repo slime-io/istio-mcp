@@ -11,15 +11,13 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/golang/protobuf/proto"
-	//"sigs.k8s.io/yaml"
-
+	"google.golang.org/protobuf/proto"
 	"gopkg.in/yaml.v2"
-	"istio.io/pkg/log"
 
 	"istio.io/istio-mcp/pkg/config/schema/resource"
 	"istio.io/istio-mcp/pkg/mcp"
 	"istio.io/istio-mcp/pkg/model"
+	"istio.io/libistio/pkg/log"
 )
 
 const (

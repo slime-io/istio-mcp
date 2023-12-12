@@ -7,8 +7,9 @@ import (
 	corev3 "github.com/envoyproxy/go-control-plane/envoy/config/core/v3"
 	discovery "github.com/envoyproxy/go-control-plane/envoy/service/discovery/v3"
 	"google.golang.org/grpc/codes"
-	"istio.io/pkg/env"
-	istioversion "istio.io/pkg/version"
+
+	istioversion "istio.io/libistio/pkg/version"
+	"istio.io/libistio/pkg/env"
 )
 
 var controlPlane *corev3.ControlPlane

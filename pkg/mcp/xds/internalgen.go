@@ -16,9 +16,9 @@ package xds
 
 import (
 	discovery "github.com/envoyproxy/go-control-plane/envoy/service/discovery/v3"
-	"github.com/golang/protobuf/proto"
-	"github.com/golang/protobuf/ptypes/any"
-	structpb "github.com/golang/protobuf/ptypes/struct"
+	"google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/types/known/anypb"
+	"google.golang.org/protobuf/types/known/structpb"
 )
 
 const (
@@ -114,7 +114,7 @@ func (s *Server) PushAll(res *discovery.DiscoveryResponse) {
 		go func() {
 			err := con.stream.Send(res)
 			if err != nil {
-				xdsLog.Infoa("Failed to send internal event ", con.ConID, " ", err)
+				xdsLog.Infof("Failed to send internal event %s %v", con.ConID, err)
 			}
 		}()
 	}
@@ -125,7 +125,7 @@ func (s *Server) PushAll(res *discovery.DiscoveryResponse) {
 // We also want connection events to be dispatched as soon as possible,
 // they may be consumed by other instances of Istiod to update internal state.
 func (sg *InternalGen) startPush(typeURL string, data []proto.Message) {
-	resources := make([]*any.Any, 0, len(data))
+	resources := make([]*anypb.Any, 0, len(data))
 	for _, v := range data {
 		resources = append(resources, MessageToAny(v))
 	}

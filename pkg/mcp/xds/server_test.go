@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"gopkg.in/yaml.v2"
+
 	"istio.io/api/networking/v1alpha3"
 
 	"istio.io/istio-mcp/pkg/model"
@@ -60,7 +61,7 @@ dubboservicemode: ""
 `
 
 func TestServer(t *testing.T) {
-	options := DefaultServerOption
+	options := ServerOptions{}
 	options.Port = 16010
 	svr := NewServer(&options)
 	store := model.NewSimpleConfigStore()
@@ -89,7 +90,7 @@ func TestServer(t *testing.T) {
 		c,
 	}))
 
-	svr.NotifyPush()
+	// svr.NotifyPush()
 
 	<-ctx.Done()
 }

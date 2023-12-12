@@ -28,24 +28,22 @@ import (
 	"time"
 
 	"github.com/cenkalti/backoff"
-	"google.golang.org/grpc/credentials"
-	"istio.io/istio-mcp/pkg/features"
-	"istio.io/pkg/monitoring"
-
 	cluster "github.com/envoyproxy/go-control-plane/envoy/config/cluster/v3"
 	core "github.com/envoyproxy/go-control-plane/envoy/config/core/v3"
 	endpoint "github.com/envoyproxy/go-control-plane/envoy/config/endpoint/v3"
 	listener "github.com/envoyproxy/go-control-plane/envoy/config/listener/v3"
 	route "github.com/envoyproxy/go-control-plane/envoy/config/route/v3"
 	discovery "github.com/envoyproxy/go-control-plane/envoy/service/discovery/v3"
-
 	pstruct "github.com/golang/protobuf/ptypes/struct"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials"
 
 	"istio.io/api/mesh/v1alpha1"
 	"istio.io/istio-mcp/pkg/config/schema/resource"
+	"istio.io/istio-mcp/pkg/features"
 	mcpclient "istio.io/istio-mcp/pkg/mcp/client"
-	istiolog "istio.io/pkg/log"
+	"istio.io/libistio/pkg/monitoring"
+	istiolog "istio.io/libistio/pkg/log"
 )
 
 type State int
@@ -83,13 +81,11 @@ const (
 )
 
 var (
-	typeTag = monitoring.MustCreateLabel("type")
-	cfgTag  = monitoring.MustCreateLabel("cfg")
+	typeTag = monitoring.CreateLabel("type")
 
 	metricAdscChange = monitoring.NewSum(
 		"adsc_change",
 		".",
-		monitoring.WithLabels(typeTag),
 	)
 
 	metricAdscChanges = [ChangeLen]monitoring.Metric{}
@@ -237,11 +233,10 @@ type ADSC struct {
 	sync   map[resource.GroupVersionKind]time.Time
 	syncCh chan string
 
-	metricCfgChanges [ChangeLen]map[string]monitoring.Metric
-	initReqGvks      []resource.GroupVersionKind
+	initReqGvks []resource.GroupVersionKind
 }
 
-var log = istiolog.RegisterScope("xdsc", "xdsc debugging", 0)
+var log = istiolog.RegisterScope("xdsc", "xdsc debugging")
 
 // New creates a new ADSC, maintaining a connection to an XDS server.
 // Will:
@@ -336,9 +331,8 @@ func (a *ADSC) tlsConfig() (*tls.Config, error) {
 	var clientCert tls.Certificate
 	var serverCABytes []byte
 	var err error
-	var certName string
 
-	certName = a.cfg.CertDir + "/cert-chain.pem"
+	certName := a.cfg.CertDir + "/cert-chain.pem"
 	clientCert, err = tls.LoadX509KeyPair(certName,
 		a.cfg.CertDir+"/key.pem")
 	if err != nil {
@@ -688,18 +682,16 @@ type ackItem struct {
 
 func (a *ADSC) ackTask(ackNotifyCh chan struct{}, ackList *list.List) {
 	for {
-		select {
-		case _, ok := <-ackNotifyCh:
-			if !ok {
-				return
-			}
+		_, ok := <-ackNotifyCh
+		if !ok {
+			return
 		}
 
 		for {
 			a.mutex.Lock()
 			f := ackList.Front()
 			if f != nil {
-			        ackList.Remove(f)
+				ackList.Remove(f)
 			}
 			a.mutex.Unlock()
 			if f == nil {

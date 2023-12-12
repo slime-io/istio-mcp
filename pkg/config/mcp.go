@@ -2,23 +2,23 @@ package config
 
 import (
 	"fmt"
-	"github.com/gogo/protobuf/proto"
-	"istio.io/istio-mcp/pkg/config/schema/resource"
 	"strings"
 
-	"github.com/gogo/protobuf/types"
-	mcp "istio.io/api/mcp/v1alpha1"
+	"google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/types/known/anypb"
 
+	mcp "istio.io/api/mcp/v1alpha1"
+	"istio.io/istio-mcp/pkg/config/schema/resource"
 	"istio.io/istio-mcp/pkg/model"
 )
 
-func McpToPilot(rev string, m *mcp.Resource, gvkArr []string, unmarshaller map[resource.GroupVersionKind]func(*types.Any) (proto.Message, error)) (*model.Config, error) {
+func McpToPilot(rev string, m *mcp.Resource, gvkArr []string, unmarshaller map[resource.GroupVersionKind]func(*anypb.Any) (proto.Message, error)) (*model.Config, error) {
 	if m == nil || m.Metadata == nil {
 		return &model.Config{}, nil
 	}
 
 	c := &model.Config{
-		ConfigMeta: model.ConfigMeta{
+		Meta: model.Meta{
 			ResourceVersion: m.Metadata.Version,
 			Labels:          m.Metadata.Labels,
 			Annotations:     m.Metadata.Annotations,
@@ -38,11 +38,7 @@ func McpToPilot(rev string, m *mcp.Resource, gvkArr []string, unmarshaller map[r
 	}
 	c.Namespace = nsn[0]
 	c.Name = nsn[1]
-	var err error
-	c.CreationTimestamp, err = types.TimestampFromProto(m.Metadata.CreateTime)
-	if err != nil {
-		return nil, err
-	}
+	c.CreationTimestamp = m.Metadata.CreateTime.AsTime()
 
 	if m.Body != nil {
 		if u := unmarshaller[gvk]; u != nil {
@@ -52,11 +48,11 @@ func McpToPilot(rev string, m *mcp.Resource, gvkArr []string, unmarshaller map[r
 			}
 			c.Spec = spec
 		} else {
-			pb, err := types.EmptyAny(m.Body)
+			pb, err := anypb.New(m.Body)
 			if err != nil {
 				return nil, err
 			}
-			err = types.UnmarshalAny(m.Body, pb)
+			err = anypb.UnmarshalTo(m.Body, pb, proto.UnmarshalOptions{})
 			if err != nil {
 				return nil, err
 			}

@@ -3,7 +3,7 @@ package client
 import (
 	"context"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"net"
 	"net/http"
 	"net/url"
@@ -12,15 +12,14 @@ import (
 	"time"
 
 	"github.com/cenkalti/backoff"
-	"istio.io/pkg/log"
-
-	"github.com/golang/protobuf/proto"
-
 	discovery "github.com/envoyproxy/go-control-plane/envoy/service/discovery/v3"
+	"google.golang.org/protobuf/proto"
+
 	"istio.io/istio-mcp/pkg/config/schema/resource"
 	mcpclient "istio.io/istio-mcp/pkg/mcp/client"
 	mcphttp "istio.io/istio-mcp/pkg/mcp/http"
 	mcpmodel "istio.io/istio-mcp/pkg/model"
+	"istio.io/libistio/pkg/log"
 )
 
 const (
@@ -100,7 +99,7 @@ func (a *ADSC) pollTask(ctx context.Context, gvk resource.GroupVersionKind) {
 	typeUrl := gvk.String()
 
 	for {
-		curCtx, _ := context.WithTimeout(ctx, a.config.PollTimeout)
+		curCtx, cancel := context.WithTimeout(ctx, a.config.PollTimeout)
 		disResp, curVer, err := a.poll(ver, gvk, curCtx)
 		if err != nil {
 			if netErr, ok := err.(net.Error); ok && netErr.Timeout() {
@@ -123,6 +122,7 @@ func (a *ADSC) pollTask(ctx context.Context, gvk resource.GroupVersionKind) {
 		} else {
 			log.Infof("httpadsc %s prev version %s, new version: %s", typeUrl, ver, curVer)
 			if a.config.DiscoveryHandler == nil {
+				cancel()
 				continue
 			}
 			if err := a.config.DiscoveryHandler.HandleResponse(disResp); err != nil {
@@ -135,6 +135,8 @@ func (a *ADSC) pollTask(ctx context.Context, gvk resource.GroupVersionKind) {
 				a.mut.Unlock()
 			}
 		}
+		// cancel the curContext
+		cancel()
 	}
 }
 
@@ -160,7 +162,7 @@ func (a *ADSC) poll(ver string, gvk resource.GroupVersionKind, ctx context.Conte
 	}
 
 	version := resp.Header.Get("version")
-	bs, err := ioutil.ReadAll(resp.Body) // should read all
+	bs, err := io.ReadAll(resp.Body) // should read all
 	if err != nil {
 		return nil, "", err
 	}

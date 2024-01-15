@@ -16,8 +16,8 @@ import (
 	"istio.io/istio-mcp/pkg/config"
 	"istio.io/istio-mcp/pkg/config/schema/resource"
 	"istio.io/istio-mcp/pkg/model"
-	"istio.io/libistio/pkg/monitoring"
 	istiolog "istio.io/libistio/pkg/log"
+	"istio.io/libistio/pkg/monitoring"
 )
 
 const (
@@ -256,8 +256,6 @@ type Config struct {
 	TypeConfigsHandler func(resource.GroupVersionKind, []*model.Config) error
 	InitReqTypes       []string
 
-	McpUnmarshaller map[resource.GroupVersionKind]func(*anypb.Any) (proto.Message, error)
-
 	// handle and convert resource to configs
 	resourceHandlers map[string]map[string]func(string, string, []byte) ([]*model.Config, error)
 	msgHandlers      map[string]func(*discovery.DiscoveryResponse) ([]*model.Config, error)
@@ -328,7 +326,6 @@ func typeName(typeUrl string) string {
 
 type ADSC struct {
 	config           *Config
-	mut              sync.Mutex
 	metricCfgChanges [ChangeLen]map[string]monitoring.Metric
 }
 
@@ -423,7 +420,7 @@ func (a *ADSC) handleMCP(gvk []string, rsc *anypb.Any, valBytes []byte) ([]*mode
 		return a.config.McpResourceHandler(gvk, m)
 	}
 
-	newCfg, err := config.McpToPilot(a.config.Revision, m, gvk, a.config.McpUnmarshaller)
+	newCfg, err := config.McpToPilot(a.config.Revision, m, gvk)
 	if err != nil {
 		log.Warnf("Invalid data %s of %v, err %v", string(valBytes), gvk, err)
 		return nil, err

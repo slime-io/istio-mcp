@@ -4,15 +4,12 @@ import (
 	"fmt"
 	"strings"
 
-	"google.golang.org/protobuf/proto"
-	"google.golang.org/protobuf/types/known/anypb"
-
 	mcp "istio.io/api/mcp/v1alpha1"
 	"istio.io/istio-mcp/pkg/config/schema/resource"
 	"istio.io/istio-mcp/pkg/model"
 )
 
-func McpToPilot(rev string, m *mcp.Resource, gvkArr []string, unmarshaller map[resource.GroupVersionKind]func(*anypb.Any) (proto.Message, error)) (*model.Config, error) {
+func McpToPilot(rev string, m *mcp.Resource, gvkArr []string) (*model.Config, error) {
 	if m == nil || m.Metadata == nil {
 		return &model.Config{}, nil
 	}
@@ -41,23 +38,12 @@ func McpToPilot(rev string, m *mcp.Resource, gvkArr []string, unmarshaller map[r
 	c.CreationTimestamp = m.Metadata.CreateTime.AsTime()
 
 	if m.Body != nil {
-		if u := unmarshaller[gvk]; u != nil {
-			spec, err := u(m.Body)
-			if err != nil {
-				return nil, err
-			}
-			c.Spec = spec
-		} else {
-			pb, err := anypb.New(m.Body)
-			if err != nil {
-				return nil, err
-			}
-			err = anypb.UnmarshalTo(m.Body, pb, proto.UnmarshalOptions{})
-			if err != nil {
-				return nil, err
-			}
-			c.Spec = pb
+		pb, err := m.Body.UnmarshalNew()
+		if err != nil {
+			return nil, err
 		}
+		c.Spec = pb
+
 	}
 	return c, nil
 }

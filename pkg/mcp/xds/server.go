@@ -196,6 +196,10 @@ func (s *Server) Start(ctx context.Context) {
 				log.Infof("xds server return err: %v", err)
 			}
 		}()
+		go func() {
+			<-ctx.Done()
+			gs.GracefulStop()
+		}()
 	}()
 }
 

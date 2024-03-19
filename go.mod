@@ -60,7 +60,7 @@ require (
 	sigs.k8s.io/yaml v1.4.0 // indirect
 )
 
-replace istio.io/libistio => github.com/slime-io/libistio v0.0.0-20240104031034-b2f5e0749ccc
+replace istio.io/libistio => github.com/slime-io/libistio v0.0.0-20240319025542-9b29030c6429
 
 // replace istio.io/libistio => ../libistio
 

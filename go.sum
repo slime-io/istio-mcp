@@ -75,8 +75,8 @@ github.com/prometheus/procfs v0.12.0 h1:jluTpSng7V9hY0O2R9DzzJHYb2xULk9VTR1V1R/k
 github.com/prometheus/procfs v0.12.0/go.mod h1:pcuDEFsWDnvcgNzo4EEweacyhjeA9Zk3cnaOZAZEfOo=
 github.com/rogpeppe/go-internal v1.10.0 h1:TMyTOH3F/DB16zRVcYyreMH6GnZZrwQVAoYjRBZyWFQ=
 github.com/russross/blackfriday/v2 v2.1.0/go.mod h1:+Rmxgy9KzJVeS9/2gXHxylqXiyQDYRxCVz55jmeOWTM=
-github.com/slime-io/libistio v0.0.0-20240104031034-b2f5e0749ccc h1:LNtU72/Afuny3/+mfRAT3f9Cc8dI2WgwPX7WL3jiCPc=
-github.com/slime-io/libistio v0.0.0-20240104031034-b2f5e0749ccc/go.mod h1:Ql3C5aJvdK++PdrR0iW/sAC1vt0Z58ZMrsG0c2jSVOM=
+github.com/slime-io/libistio v0.0.0-20240319025542-9b29030c6429 h1:99fHy1T1ElayPgGd9IBuqIbhl8+lhfZWSpcPFE9prR4=
+github.com/slime-io/libistio v0.0.0-20240319025542-9b29030c6429/go.mod h1:3KhSVR3uXVIcSqVvPCc/5U+QgAsBM32HJ+xKpDQRmDs=
 github.com/spf13/cobra v1.7.0 h1:hyqWnYt1ZQShIddO5kBpj3vu05/++x6tJ6dg8EC572I=
 github.com/spf13/cobra v1.7.0/go.mod h1:uLxZILRyS/50WlhOIKD7W6V5bgeIt+4sICxh6uRMrb0=
 github.com/spf13/pflag v1.0.5 h1:iy+VFUOCP1a+8yFto/drg2CJ5u0yRoB7fZw3DKv/JXA=
